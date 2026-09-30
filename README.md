@@ -35,6 +35,13 @@ TVBox 风格的影视源聚合与播放工具:管理多个 TVBox JSON 源,浏览
 start.bat
 ```
 
+每次运行会先清掉上次的残留进程,再检查 Python/npm 依赖,并轮询
+`/api/health` 确认后端真的起来了才打开浏览器;缺依赖或端口被占用时
+会明确报错并停下,而不是假装启动成功。重复双击是安全的(幂等)。
+
+> 入口是 `start.bat` / `stop.bat`,实际逻辑在 `start.ps1` / `stop.ps1`
+> (依赖系统自带的 PowerShell)。
+
 手动启动:
 
 ```bat
@@ -85,7 +92,8 @@ npx vite --host
 
 ```
 video_hub/
-├── start.bat / stop.bat     一键启停
+├── start.bat / stop.bat     一键启停(入口)
+├── start.ps1 / stop.ps1     启停实际逻辑
 ├── README.md
 ├── backend/
 │   ├── main.py              FastAPI 路由

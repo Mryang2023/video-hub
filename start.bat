@@ -1,32 +1,23 @@
 @echo off
-echo ========================================
-echo   VideoHub - Starting...
-echo ========================================
-echo.
-
+rem ============================================================
+rem  VideoHub - one-click start entry point.
+rem
+rem  The real logic lives in start.ps1, which does:
+rem    1) kill leftover instances   2) check python / npm deps
+rem    3) start backend + frontend  4) poll /api/health before
+rem       opening the browser, and reports failure instead of
+rem       pretending to have succeeded.
+rem
+rem  Kept ASCII-only on purpose: cmd.exe reads .bat files with the
+rem  console codepage, so UTF-8 Chinese text here would be garbled.
+rem ============================================================
 cd /d "%~dp0"
-
-rem Honour backend config.py defaults (0.0.0.0:8000) unless overridden
-if "%VIDEOHUB_HOST%"=="" set "VIDEOHUB_HOST=0.0.0.0"
-if "%VIDEOHUB_PORT%"=="" set "VIDEOHUB_PORT=8000"
-
-echo [1/2] Starting backend (port %VIDEOHUB_PORT%)...
-start "VideoHub Backend" cmd /k "cd backend && python -m uvicorn main:app --host %VIDEOHUB_HOST% --port %VIDEOHUB_PORT% --reload"
-
-echo [2/2] Starting frontend (port 5173)...
-start "VideoHub Frontend" cmd /k "cd frontend && npx vite --host 0.0.0.0"
-
+rem .exe suffix on purpose: git-bash / cygwin ships its own powershell
+rem wrappers on PATH in some setups.
+powershell.exe -NoProfile -NoLogo -ExecutionPolicy Bypass -File "%~dp0start.ps1"
+set "RC=%ERRORLEVEL%"
 echo.
-echo Waiting for servers to start...
-timeout /t 5 /nobreak >nul
-
-echo.
-echo Opening browser...
-start http://localhost:5173
-
-echo.
-echo ========================================
-echo   VideoHub is running!
-echo   Frontend: http://localhost:5173
-echo   Backend:  http://localhost:8000
-echo ========================================
+if not "%RC%"=="0" (
+    echo Startup FAILED - please read the error above.
+    pause
+)
