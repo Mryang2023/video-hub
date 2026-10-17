@@ -349,26 +349,32 @@ async def proxy_m3u8(url: str, referer: str = "", timeout: float = 10) -> str:
     return result
 
 
-async def proxy_stream(url: str, referer: str = "", timeout: float = 15) -> tuple[bytes | str, str, bool]:
-    """Proxy a raw video segment. Returns (content_bytes, content_type, is_m3u8)."""
+async def open_stream(url: str, referer: str = "", timeout: float = 15,
+                      range_header: str | None = None) -> httpx.Response:
+    """Open an upstream media response in streaming mode (caller owns closing).
+
+    Used for video segment/key pass-through: bytes flow to the player as they
+    arrive instead of being fully buffered in memory first, which cuts
+    start/seek latency and removes per-segment memory spikes.
+    """
     headers = {**HTTP_HEADERS}
     if referer:
         headers["Referer"] = referer
-
+    if range_header:
+        headers["Range"] = range_header
     client = _get_client()
-    resp = await client.get(url, headers=headers, timeout=timeout)
+    resp = await client.send(client.build_request("GET", url, headers=headers), stream=True)
     resp.raise_for_status()
-    _check_body_size(resp)
-    ct = resp.headers.get("content-type", "application/octet-stream")
+    return resp
 
-    # If it's another m3u8, return it for the caller to rewrite
-    if "mpegurl" in ct or url.endswith(".m3u8"):
-        text = decode_body(resp.content, ct)
-        return text, ct, True  # (content, type, is_m3u8)
 
-    content = resp.content
-    _check_body_downloaded(content)
-    return content, ct, False
+async def iter_stream(resp: httpx.Response, chunk_size: int = 256 * 1024):
+    """Yield an upstream streaming response in chunks, always closing it."""
+    try:
+        async for chunk in resp.aiter_bytes(chunk_size):
+            yield chunk
+    finally:
+        await resp.aclose()
 
 
 async def proxy_image(url: str, referer: str = "") -> tuple[bytes, str]:

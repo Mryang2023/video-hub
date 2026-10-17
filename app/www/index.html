@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+  <meta name="color-scheme" content="dark" />
+  <title>VideoHub</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+      background: #0a0a0f;
+      color: #e5e7eb;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .card { width: 100%; max-width: 420px; text-align: center; }
+    .logo {
+      width: 88px; height: 88px; margin: 0 auto 18px;
+      border-radius: 24px;
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 8px 30px rgba(99, 102, 241, 0.35);
+    }
+    h1 { font-size: 26px; font-weight: 700; letter-spacing: 0.5px; }
+    .sub { color: #9ca3af; font-size: 13px; margin: 8px 0 28px; }
+    .field { display: flex; gap: 10px; }
+    input {
+      flex: 1; min-width: 0;
+      background: #1a1a26; border: 1px solid #2e2e44; border-radius: 12px;
+      color: #e5e7eb; font-size: 16px; padding: 13px 14px; outline: none;
+    }
+    input:focus { border-color: #6366f1; }
+    button {
+      border: none; border-radius: 12px; cursor: pointer;
+      background: #6366f1; color: #fff; font-size: 15px; font-weight: 600;
+      padding: 13px 20px;
+    }
+    button:active { background: #4f46e5; }
+    button.ghost { background: #242436; color: #cbd5f5; }
+    .status { margin-top: 20px; font-size: 14px; min-height: 22px; }
+    .status.ok { color: #4ade80; }
+    .status.err { color: #f87171; }
+    .spinner {
+      width: 18px; height: 18px; display: inline-block; vertical-align: -4px; margin-right: 8px;
+      border: 2px solid #3e3e5a; border-top-color: #818cf8; border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .hidden { display: none !important; }
+    .actions { display: flex; gap: 10px; justify-content: center; margin-top: 14px; }
+    .hint { margin-top: 30px; color: #6b7280; font-size: 12px; line-height: 1.8; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">
+      <svg width="44" height="44" viewBox="0 0 24 24" fill="none">
+        <path d="M8 5.5v13l11-6.5-11-6.5z" fill="#fff"/>
+      </svg>
+    </div>
+    <h1>VideoHub</h1>
+    <p class="sub">连接到你的影视服务器</p>
+
+    <!-- 首次设置 / 手动管理 -->
+    <div id="setup">
+      <div class="field">
+        <input id="addr" type="url" inputmode="url" autocomplete="off"
+               spellcheck="false" placeholder="http://192.168.x.x:8000" />
+        <button id="btnConnect">连接</button>
+      </div>
+      <p class="status" id="setupStatus"></p>
+    </div>
+
+    <!-- 自动连接中 -->
+    <div id="connecting" class="hidden">
+      <p class="status"><span class="spinner"></span><span id="connectText">正在连接…</span></p>
+      <div class="actions"><button class="ghost" id="btnEdit">修改地址</button></div>
+    </div>
+
+    <!-- 连接失败 -->
+    <div id="failed" class="hidden">
+      <p class="status err" id="errMsg"></p>
+      <div class="actions">
+        <button id="btnRetry">重试</button>
+        <button class="ghost" id="btnEdit2">修改地址</button>
+      </div>
+    </div>
+
+    <p class="hint">
+      手机需与服务器处于同一网络<br />
+      电脑端需已运行 start.bat 启动服务<br />
+      在影片页面按系统返回键可回到本页修改地址
+    </p>
+  </div>
+
+  <script>
+    const KEY = 'vh_server_url';
+    // 交付时内嵌的默认服务器地址（按当前电脑局域网 IP 生成，可在界面修改）
+    const DEFAULT_ADDR = 'http://192.168.101.18:8000';
+    const $ = (id) => document.getElementById(id);
+    const views = { setup: $('setup'), connecting: $('connecting'), failed: $('failed') };
+
+    function show(name) {
+      for (const k in views) views[k].classList.toggle('hidden', k !== name);
+    }
+
+    function normalizeAddress(raw) {
+      let v = (raw || '').trim();
+      if (!v) return { error: '请输入服务器地址' };
+      if (!/^https?:\/\//i.test(v)) v = 'http://' + v;
+      v = v.replace(/\/+$/, '');
+      try {
+        const u = new URL(v);
+        if (u.protocol !== 'http:' && u.protocol !== 'https:') throw 0;
+        if (!u.hostname) throw 0;
+        return { url: u.origin };
+      } catch {
+        return { error: '地址格式不正确，示例：http://192.168.101.18:8000' };
+      }
+    }
+
+    async function checkServer(addr) {
+      const resp = await fetch(addr + '/api/health', { signal: AbortSignal.timeout(6000) });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const data = await resp.json();
+      if (!data || data.status !== 'ok') throw new Error('不是 VideoHub 服务器');
+    }
+
+    async function connect(addr) {
+      show('connecting');
+      $('connectText').textContent = '正在连接 ' + addr + ' …';
+      try {
+        await checkServer(addr);
+        localStorage.setItem(KEY, addr);
+        location.href = addr + '/';
+      } catch (e) {
+        const reason = e && e.name === 'TimeoutError'
+          ? '连接超时：请确认手机与服务器在同一网络，且电脑已运行服务'
+          : '无法连接服务器：' + addr;
+        show('failed');
+        $('errMsg').textContent = reason;
+        $('addr').value = addr;
+      }
+    }
+
+    $('btnConnect').addEventListener('click', () => {
+      const r = normalizeAddress($('addr').value);
+      if (r.error) { $('setupStatus').textContent = r.error; $('setupStatus').className = 'status err'; return; }
+      connect(r.url);
+    });
+    $('addr').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btnConnect').click(); });
+    $('btnRetry').addEventListener('click', () => connect(normalizeAddress($('addr').value).url));
+    $('btnEdit').addEventListener('click', () => show('setup'));
+    $('btnEdit2').addEventListener('click', () => show('setup'));
+
+    // 冷启动：按返回键从影片页回到本页时浏览器导航类型为 back_forward，
+    // 此时停留在管理界面不再自动跳转，方便改地址。
+    const cameBack = performance.getEntriesByType('navigation')[0]?.type === 'back_forward';
+    const saved = localStorage.getItem(KEY);
+
+    if (saved && !cameBack) {
+      $('addr').value = saved;
+      connect(saved);
+    } else {
+      $('addr').value = saved || DEFAULT_ADDR;
+      show('setup');
+      if (saved) $('setupStatus').textContent = '当前已保存：' + saved;
+    }
+  </script>
+</body>
+</html>

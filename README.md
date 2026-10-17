@@ -56,6 +56,18 @@ npm install
 npx vite --host
 ```
 
+> 日常在浏览器/手机上使用**不需要** vite dev server：后端已直接托管 `frontend/dist`
+> （改动前端后 `npm run build` 即可），浏览器直接访问 `http://localhost:8000`。
+> vite 仅在开发调试时使用。
+
+## 安卓 APP
+
+个人自用安卓客户端（Capacitor WebView 壳，不上架）：手机安装 APK 后直接访问家里电脑上的服务，
+支持沉浸式全屏、返回键回退、播放常亮等原生体验。手机浏览器访问
+`http://192.168.101.18:8000/apk/videohub.apk` 即可下载安装。
+
+详见 [docs/android-app.md](docs/android-app.md)（安装、改服务器地址、重新打包、签名备份、Tailscale 外网访问）。
+
 ## 配置(config.py,均可用环境变量覆盖)
 
 | 配置 | 默认 | 环境变量 | 说明 |
@@ -115,3 +127,12 @@ video_hub/
 
 - 数据全部在 `backend/data/`(已加入 .gitignore),升级代码前建议手动备份该目录。
 - 公益源接口经常失效,用源下拉的「一键检测」排查;源地址失效时更换配置 URL 即可。
+
+## 性能机制（0.3）
+
+- **分段流式透传**：`/api/proxy/stream` 用 httpx stream + StreamingResponse 边收边发,
+  分段首字节比旧的全量缓冲模式提前 20%~45% 到达,播放起播/拖动更快,且不再有每段整块内存峰值。
+- **hls.js 按需加载**：播放器库(524KB/162KB gzip)改为进入 HLS 播放时动态 import,
+  首屏加载明显变轻;另设 `backBufferLength=90` 修剪已播缓冲,长片不涨内存。
+- **缓存体系**：API 列表/详情/搜索/m3u8/图片/站点探测均为内存 TTL 缓存(命中即回),
+  图片响应带 `Cache-Control: max-age=86400` 由 WebView 层二次缓存,重复浏览几乎零回源。

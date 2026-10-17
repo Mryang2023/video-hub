@@ -2,20 +2,20 @@
   <div class="h-screen flex flex-col">
     <!-- Header -->
     <header class="h-14 bg-dark-800 border-b border-dark-600 flex items-center px-3 sm:px-4 gap-2 sm:gap-4 shrink-0 z-50">
-      <button @click="sidebarOpen = !sidebarOpen" class="text-gray-400 hover:text-white transition p-1">
+      <button v-show="!(isMobile && searchOpen)" @click="sidebarOpen = !sidebarOpen" class="text-gray-400 hover:text-white transition p-1">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
         </svg>
       </button>
 
-      <router-link to="/" class="flex items-center gap-2 shrink-0">
+      <router-link v-show="!(isMobile && searchOpen)" to="/" class="flex items-center gap-2 shrink-0">
         <span class="text-lg font-bold bg-gradient-to-r from-accent-light to-accent bg-clip-text text-transparent">
           VideoHub
         </span>
       </router-link>
 
       <!-- Source Selector -->
-      <div class="relative" ref="sourceDropdown">
+      <div v-show="!(isMobile && searchOpen)" class="relative" ref="sourceDropdown">
         <button @click="showSourceMenu = !showSourceMenu"
           class="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 bg-dark-600 rounded-lg text-sm hover:bg-dark-500 transition">
           <span class="text-gray-300 truncate max-w-[100px] sm:max-w-none">{{ currentSource?.name || '选择源' }}</span>
@@ -63,10 +63,10 @@
       </div>
 
       <!-- Search -->
-      <div class="flex-1 max-w-xl mx-auto flex items-center gap-2">
+      <div class="flex-1 max-w-xl mx-auto flex items-center gap-2 min-w-0">
         <template v-if="!isMobile || searchOpen">
-          <div class="relative flex-1">
-            <input v-model="searchQuery" @keyup.enter="doSearch"
+          <div class="relative flex-1 min-w-0">
+            <input ref="searchInput" v-model="searchQuery" @keyup.enter="doSearch"
               @focus="searchFocused = true" @blur="onSearchBlur"
               type="text" placeholder="搜索视频..."
               class="w-full bg-dark-600 border border-dark-500 rounded-lg px-4 py-1.5 pl-9 text-sm
@@ -108,22 +108,36 @@
             </button>
           </div>
         </template>
-        <button v-else @click="searchOpen = true" title="搜索"
-          class="text-gray-400 hover:text-white transition p-1">
+        <button v-else @click="openSearch" title="搜索"
+          class="text-gray-400 hover:text-white transition p-1 shrink-0">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
           </svg>
         </button>
       </div>
 
-      <!-- History link -->
-      <button @click="goPage('/history')" title="观看历史"
+      <!-- History link / mobile: close search -->
+      <button v-if="isMobile && searchOpen" @click="closeSearch" title="关闭搜索"
+        class="text-gray-400 hover:text-white transition p-1 shrink-0">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+      <button v-else @click="goPage('/history')" title="观看历史"
         class="text-gray-400 hover:text-white transition p-1 shrink-0">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
         </svg>
       </button>
     </header>
+
+    <!-- APP 新版本横幅 -->
+    <div v-if="appUpdate" class="bg-accent/20 border-b border-accent/30 px-3 py-2 flex items-center gap-2 text-sm shrink-0">
+      <span class="text-accent-light truncate">🎉 新版本 v{{ appUpdate.version }} 可用{{ appUpdate.notes ? '：' + appUpdate.notes : '' }}</span>
+      <button @click="doAppUpdate"
+        class="ml-auto px-2.5 py-1 bg-accent rounded-lg text-white text-xs shrink-0">下载更新</button>
+      <button @click="appUpdate = null" class="text-gray-400 hover:text-white text-xs px-1 shrink-0">✕</button>
+    </div>
 
     <!-- Body -->
     <div class="flex flex-1 overflow-hidden">
@@ -145,7 +159,10 @@
           <div v-else-if="sites.length" class="py-2">
             <div class="px-3 py-1.5 text-xs text-gray-500 font-semibold uppercase tracking-wider flex items-center justify-between">
               <span>可用站点</span>
-              <span class="text-[10px] font-normal">{{ searchableSites.length }}/{{ sites.length }}</span>
+              <button @click="probeCurrentSites" :disabled="probing || !searchableSites.length"
+                class="text-[10px] font-normal text-accent-light hover:text-accent disabled:opacity-40 transition">
+                {{ probing ? '检测中…' : '检测站点' }}
+              </button>
             </div>
             <div v-for="site in searchableSites" :key="site.key"
               @click="selectSite(site)"
@@ -153,8 +170,7 @@
               :class="currentSite?.key === site.key
                 ? 'bg-accent/15 text-accent-light border-r-2 border-accent'
                 : 'text-gray-300 hover:bg-dark-700 hover:text-white'">
-              <span class="w-2 h-2 rounded-full shrink-0"
-                :class="currentSite?.key === site.key ? 'bg-accent' : 'bg-gray-600'"></span>
+              <span class="w-2 h-2 rounded-full shrink-0" :class="siteDotClass(site)"></span>
               <span class="truncate">{{ site.name }}</span>
             </div>
             <div v-if="searchableSites.length === 0"
@@ -265,9 +281,9 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getSources, addSource, deleteSource, getSites, sourcesHealth } from './api'
+import { getSources, addSource, deleteSource, getSites, sourcesHealth, probeSites } from './api'
 import { useToast } from './composables/useToast'
 import SourceManager from './components/SourceManager.vue'
 import ToastContainer from './components/ToastContainer.vue'
@@ -282,8 +298,22 @@ const currentSource = ref(null)
 const sites = ref([])
 const currentSite = ref(null)
 const searchQuery = ref('')
-const searchMode = ref('site') // 'site' = current site only, 'all' = aggregate
+const searchMode = ref('all') // 'site' = current site only, 'all' = aggregate；默认全源（第三方站点不稳定，全源带故障转移命中率更高）
 const searchOpen = ref(false) // mobile: search input starts collapsed
+const searchInput = ref(null)
+
+// 移动端展开搜索：隐藏标题/源选择，聚焦输入框并拉起键盘
+async function openSearch() {
+  searchOpen.value = true
+  await nextTick()
+  searchInput.value?.focus()
+}
+
+function closeSearch() {
+  searchOpen.value = false
+  searchQuery.value = ''
+  searchFocused.value = false
+}
 
 const mobileNav = [
   { path: '/', label: '首页', icon: 'home' },
@@ -312,6 +342,13 @@ let sitesAbort = null
 const loadingSites = ref(false)
 const sitesError = ref('')
 
+// 站点健康探测：api_url -> {ok, latency_ms}
+const probeState = ref({})
+const probing = ref(false)
+
+// APP 版本更新
+const appUpdate = ref(null)
+
 const searchableSites = computed(() =>
   sites.value.filter(s => s.type === 1 && (s.searchable === 1 || s.searchable === undefined))
 )
@@ -320,6 +357,7 @@ const searchableSites = computed(() =>
 onMounted(async () => {
   await loadSources()
   loadSearchHistory()
+  checkAppUpdate()
   document.addEventListener('click', closeSourceMenu)
   window.addEventListener('resize', onResize)
 })
@@ -353,6 +391,78 @@ async function loadSources() {
   }
 }
 
+// 站点经常失联：探测候选站点并自动选中第一个可用的（后端探测缓存 5 分钟）
+async function autoPickSite(list) {
+  const candidates = list.filter(s => s.type === 1 && s.api).slice(0, 6)
+  if (!candidates.length) return
+  let picked = candidates[0]
+  try {
+    const { data } = await probeSites(candidates.map(s => s.api))
+    const okSite = candidates.find(c => (data.results || []).find(r => r.api_url === c.api && r.ok))
+    if (okSite) picked = okSite
+  } catch { /* 探测失败就选第一个候选 */ }
+  if (!currentSite.value || currentSite.value.key !== picked.key) {
+    // 启动自动选站不改变当前路由，保住 #/player 等深链接
+    selectSite(picked, { keepRoute: true })
+  }
+}
+
+// 手动批量检测当前源的可搜索站点健康状态
+async function probeCurrentSites() {
+  if (!currentSource.value || probing.value) return
+  probing.value = true
+  try {
+    const urls = searchableSites.value.slice(0, 80).map(s => s.api)
+    if (!urls.length) return
+    const { data } = await probeSites(urls)
+    const map = {}
+    for (const r of data.results || []) map[r.api_url] = r
+    probeState.value = map
+    const ok = (data.results || []).filter(r => r.ok).length
+    handleToast({ message: `检测完成：${ok}/${(data.results || []).length} 个站点可用`, type: 'info' })
+  } catch (e) {
+    toastError(`检测失败: ${e.message}`)
+  } finally {
+    probing.value = false
+  }
+}
+
+function siteDotClass(site) {
+  if (currentSite.value?.key === site.key) return 'bg-accent'
+  const p = probeState.value[site.api]
+  if (p) return p.ok ? 'bg-green-500' : 'bg-red-500'
+  return 'bg-gray-600'
+}
+
+// 检查 APP 新版本（仅 APP 内生效，浏览器无 AppNative）
+async function checkAppUpdate() {
+  if (!window.AppNative?.getAppVersion) return
+  try {
+    const cur = window.AppNative.getAppVersion()
+    const resp = await fetch('/apk/version.json', { cache: 'no-store' })
+    if (!resp.ok) return
+    const meta = await resp.json()
+    if (meta && meta.version && meta.version !== cur) {
+      appUpdate.value = meta
+    }
+  } catch { /* 无更新清单或网络失败，忽略 */ }
+}
+
+function doAppUpdate() {
+  if (!appUpdate.value?.url) return
+  try {
+    if (window.AppNative?.downloadApk) {
+      window.AppNative.downloadApk(appUpdate.value.url)
+      handleToast({ message: '已开始下载，完成后在通知栏点击安装', type: 'info' })
+    } else {
+      window.open(appUpdate.value.url, '_blank')
+    }
+    appUpdate.value = null
+  } catch (e) {
+    toastError(`下载失败: ${e.message}`)
+  }
+}
+
 async function selectSource(source) {
   currentSource.value = source
   currentSite.value = null
@@ -361,8 +471,7 @@ async function selectSource(source) {
   // Check cache first — instant switch back
   if (sitesCache.has(source.id)) {
     sites.value = sitesCache.get(source.id)
-    const usable = sites.value.find(s => s.type === 1)
-    if (usable) selectSite(usable)
+    await autoPickSite(sites.value)
     return
   }
 
@@ -377,8 +486,7 @@ async function selectSource(source) {
     const loaded = data.sites || []
     sites.value = loaded
     sitesCache.set(source.id, loaded)
-    const usable = loaded.find(s => s.type === 1)
-    if (usable) selectSite(usable)
+    await autoPickSite(loaded)
   } catch (e) {
     if (e.name !== 'CanceledError' && e.name !== 'AbortError') {
       console.error('Failed to load sites:', e)
@@ -391,11 +499,11 @@ async function selectSource(source) {
   }
 }
 
-function selectSite(site) {
+function selectSite(site, opts = {}) {
   currentSite.value = site
   // Close sidebar on mobile after selection
   if (isMobile.value) sidebarOpen.value = false
-  router.push('/')
+  if (opts.keepRoute !== true) router.push('/')
 }
 
 async function removeSource(id) {

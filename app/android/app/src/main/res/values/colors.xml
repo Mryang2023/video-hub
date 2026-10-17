@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 与前端主题一致：深色底 + 靛蓝强调 -->
+    <color name="colorPrimary">#6366F1</color>
+    <color name="colorPrimaryDark">#0A0A0F</color>
+    <color name="colorAccent">#818CF8</color>
+</resources>

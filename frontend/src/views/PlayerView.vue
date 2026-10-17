@@ -1,15 +1,37 @@
 <template>
   <div class="h-full flex flex-col bg-dark-900">
     <!-- Player Area -->
-    <div class="relative bg-black flex-1 min-h-0" ref="playerContainer"
+    <div class="relative bg-black flex-1 min-h-0" :class="cssFullscreen ? '!fixed inset-0 z-[9999]' : ''" ref="playerContainer"
       @mousemove="onMouseMove" @click="onClickPlayer" @dblclick="onDblClick">
 
-      <video ref="videoEl" class="w-full h-full object-contain"
+      <video ref="videoEl" class="w-full h-full object-contain touch-none select-none"
         @timeupdate="onTimeUpdate" @loadedmetadata="onLoaded" @ended="onEnded"
         @play="playing = true" @pause="playing = false"
         @volumechange="onVolumeChange"
-        @waiting="buffering = true" @canplay="buffering = false">
+        @waiting="buffering = true" @canplay="buffering = false"
+        @touchstart="onTouchStart" @touchmove="onTouchMove" @touchend="onTouchEnd" @touchcancel="onTouchEnd">
       </video>
+
+      <!-- Brightness overlay (左滑手势) -->
+      <div v-if="brightness > 0" class="absolute inset-0 bg-black pointer-events-none"
+        :style="{ opacity: brightness }"></div>
+
+      <!-- Gesture indicator (亮度/音量/快进预览) -->
+      <div v-if="gestureInfo" class="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+        <div class="bg-black/70 rounded-xl px-5 py-3 text-center backdrop-blur-sm">
+          <div class="text-white text-lg font-semibold tabular-nums">{{ gestureInfo.main }}</div>
+          <div v-if="gestureInfo.sub" class="text-gray-300 text-xs mt-0.5">{{ gestureInfo.sub }}</div>
+        </div>
+      </div>
+
+      <!-- Locked: floating unlock button -->
+      <button v-if="locked" @click="locked = false" title="解锁"
+        class="absolute top-3 right-3 z-30 p-2 bg-black/60 rounded-full text-white/90 backdrop-blur-sm">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+        </svg>
+      </button>
 
       <!-- Initial loading overlay -->
       <div v-if="playerLoading" class="absolute inset-0 flex items-center justify-center bg-black/60 pointer-events-none">
@@ -30,7 +52,7 @@
       </transition>
 
       <!-- Center play button (when paused) -->
-      <div v-if="!playing && !playerLoading && !playerError"
+      <div v-if="!locked && !playing && !playerLoading && !playerError"
         class="absolute inset-0 flex items-center justify-center pointer-events-none">
         <div class="w-16 h-16 bg-black/40 rounded-full flex items-center justify-center backdrop-blur-sm">
           <svg class="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
@@ -62,8 +84,8 @@
         </div>
       </transition>
 
-      <!-- Custom Controls -->
-      <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 pt-8"
+      <!-- Custom Controls (locked 时整体隐藏) -->
+      <div v-if="!locked" class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 pt-8"
         @mouseenter="showControls = true" @mouseleave="showControls = playing ? false : true"
         :class="{ 'opacity-0': !showControls && playing }"
         style="transition: opacity 0.3s"
@@ -174,11 +196,27 @@
           </div>
 
           <!-- Picture-in-Picture -->
-          <button @click="togglePiP" class="text-gray-300 hover:text-white transition hidden sm:block" title="画中画">
+          <button @click="togglePiP" class="text-gray-300 hover:text-white transition" title="画中画">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z"/>
               <rect x="12" y="12" width="6" height="5" rx="0.5" fill="currentColor" stroke="none"/>
+            </svg>
+          </button>
+
+          <!-- External player (APP 内调用系统播放器) -->
+          <button v-if="currentPlayUrl" @click="playExternal" class="text-gray-300 hover:text-white transition" title="外部播放器">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+            </svg>
+          </button>
+
+          <!-- Lock (防误触) -->
+          <button @click="locked = true" class="text-gray-300 hover:text-white transition" title="锁定屏幕">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
             </svg>
           </button>
 
@@ -247,7 +285,12 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
-import Hls from 'hls.js'
+// hls.js 按需加载：首屏不拉取 524KB(162KB gzip) 的播放器库，进入 HLS 播放时才加载
+let HlsLib = null
+async function loadHls() {
+  if (!HlsLib) HlsLib = (await import('hls.js')).default
+  return HlsLib
+}
 import { getHistory, saveHistory, getDetail, resolvePlayUrl, getSettings } from '../api'
 
 const route = useRoute()
@@ -261,6 +304,16 @@ const qualityMenu = ref(null)
 // State
 const hls = ref(null)
 const playing = ref(false)
+
+// Android APP：通过原生 AppNative 接口（MainActivity 注入的 JavascriptInterface）保持屏幕常亮；浏览器端为 no-op。
+function setKeepAwake(on) {
+  try { window.AppNative?.setKeepAwake(!!on) } catch { /* noop */ }
+}
+watch(playing, (p) => {
+  setKeepAwake(p)
+  // 通知原生播放状态：用于"退到桌面自动进入画中画"
+  try { window.AppNative?.setPlaying?.(!!p) } catch { /* noop */ }
+})
 const buffering = ref(false)
 const currentTime = ref(0)
 const duration = ref(0)
@@ -343,6 +396,7 @@ onMounted(() => {
   loadAppSettings()
   document.addEventListener('keydown', handleKeydown)
   document.addEventListener('click', closeMenus)
+  window.addEventListener('popstate', onFsPopState)
   saveInterval = setInterval(saveProgress, 10000)
 })
 
@@ -355,6 +409,12 @@ async function loadAppSettings() {
 
 onUnmounted(() => {
   destroyHls()
+  setKeepAwake(false)
+  try { window.AppNative?.setPlaying?.(false) } catch { /* noop */ }
+  if (cssFullscreen.value) exitAppFullscreen(false)
+  clearTimeout(gesture.lpTimer)
+  clearTimeout(gesture.hideTimer)
+  window.removeEventListener('popstate', onFsPopState)
   clearTimeout(loadingTimeout)
   clearTimeout(bufferCountTimer)
   document.removeEventListener('keydown', handleKeydown)
@@ -411,6 +471,13 @@ async function loadEpisodes() {
           const [name, url] = ep.split('$')
           return { name: name || url, url: url || name }
         })
+        // 无 play_url 进入时（如旧历史记录恢复），自动定位到当前集并开播
+        if (!currentPlayUrl.value && episodes.value[currentEpisodeIndex.value]) {
+          const ep = episodes.value[currentEpisodeIndex.value]
+          episodeName.value = ep.name || `第${currentEpisodeIndex.value + 1}集`
+          currentPlayUrl.value = ep.url
+          loadVideo(ep.url)
+        }
       }
     }
   } catch (e) {
@@ -451,6 +518,7 @@ async function loadVideo(url) {
 
   if (isHls) {
     const proxiedUrl = `/api/proxy/m3u8?url=${encodeURIComponent(resolvedUrl)}`
+    const Hls = await loadHls()
 
     if (Hls.isSupported()) {
       const h = new Hls({
@@ -461,6 +529,7 @@ async function loadVideo(url) {
         maxMaxBufferLength: 120,     // cap at 2min (default 600)
         maxBufferSize: 80 * 1000 * 1000,  // 80MB cap
         maxBufferHole: 0.5,          // max gap to tolerate
+        backBufferLength: 90,        // 释放已播放的缓冲，长片不涨内存
         // ABR — conservative start, fast adaptation
         abrEwmaDefaultEstimate: 800000,   // start at ~800kbps estimate
         abrEwmaFastLive: 3.0,        // fast bandwidth estimation
@@ -614,7 +683,37 @@ function setSpeed(rate) {
   showAction(`${rate}x 倍速`)
 }
 
-function toggleFullscreen() {
+// ── 全屏：APP 内为 CSS 全屏 + 原生沉浸（AppNative 隐藏系统栏/锁定方向，Capacitor 会拦截
+//    HTML5 requestFullscreen 且桥 JS 不注入远程页面）；浏览器端仍走标准 Fullscreen API ──
+const cssFullscreen = ref(false)
+
+async function enterAppFullscreen() {
+  const native = window.AppNative
+  if (!native) return
+  const v = videoEl.value
+  const landscape = (v?.videoWidth || 16) >= (v?.videoHeight || 9)
+  try { native.enterImmersive(landscape ? 'landscape' : 'portrait') } catch {}
+  cssFullscreen.value = true
+  // 压入一条全屏历史，让系统返回键先退出全屏而不是退出播放页
+  history.pushState({ vhfs: 1 }, '')
+}
+
+async function exitAppFullscreen(withHistory = true) {
+  try { window.AppNative?.exitImmersive() } catch {}
+  cssFullscreen.value = false
+  if (withHistory && history.state?.vhfs) history.back()
+}
+
+function onFsPopState() {
+  if (cssFullscreen.value && !history.state?.vhfs) exitAppFullscreen(false)
+}
+
+async function toggleFullscreen() {
+  if (window.AppNative) {
+    if (cssFullscreen.value) exitAppFullscreen()
+    else enterAppFullscreen()
+    return
+  }
   if (document.fullscreenElement) {
     document.exitFullscreen()
   } else {
@@ -623,6 +722,11 @@ function toggleFullscreen() {
 }
 
 async function togglePiP() {
+  // APP 内走原生画中画（WebView 的 requestPictureInPicture 不可靠）
+  if (window.AppNative?.enterPip) {
+    try { window.AppNative.enterPip(); showAction('画中画') } catch {}
+    return
+  }
   try {
     if (document.pictureInPictureElement) {
       await document.exitPictureInPicture()
@@ -633,6 +737,105 @@ async function togglePiP() {
   } catch (e) {
     console.warn('PiP not supported:', e)
   }
+}
+
+// 用系统外部播放器打开当前直链（APP 内弹选择器，浏览器新窗口）
+function playExternal() {
+  const url = currentPlayUrl.value
+  if (!url) return
+  if (window.AppNative?.playExternal) {
+    try { window.AppNative.playExternal(url); showAction('已调用外部播放器') } catch {}
+  } else {
+    window.open(url, '_blank')
+  }
+}
+
+// ── 移动手势（在 video 元素上）：横滑快进退 / 左侧上下滑亮度 / 右侧上下滑音量 / 长按 3x ──
+const locked = ref(false)
+const brightness = ref(0) // 黑色遮罩透明度 0~0.85
+const gestureInfo = ref(null)
+const gesture = {
+  active: false, mode: null, startX: 0, startY: 0, startTime: 0,
+  lpTimer: null, seekBase: 0, volBase: 0, brightBase: 0, seekTarget: null,
+  hideTimer: null,
+}
+
+function showGesture(main, sub = '') {
+  gestureInfo.value = { main, sub }
+  clearTimeout(gesture.hideTimer)
+}
+
+function hideGestureSoon() {
+  clearTimeout(gesture.hideTimer)
+  gesture.hideTimer = setTimeout(() => { gestureInfo.value = null }, 350)
+}
+
+function onTouchStart(e) {
+  if (locked.value) return
+  const t = e.touches[0]
+  gesture.active = true
+  gesture.mode = null
+  gesture.seekTarget = null
+  gesture.startX = t.clientX
+  gesture.startY = t.clientY
+  gesture.startTime = Date.now()
+  gesture.seekBase = currentTime.value
+  gesture.volBase = volume.value
+  gesture.brightBase = 1 - brightness.value / 0.85  // 亮度档位 0~1
+  clearTimeout(gesture.lpTimer)
+  gesture.lpTimer = setTimeout(() => {
+    if (gesture.active && !gesture.mode && playing.value && duration.value) {
+      gesture.mode = 'speed'
+      videoEl.value.playbackRate = 3
+      showGesture('3x 倍速', '松开恢复')
+    }
+  }, 500)
+}
+
+function onTouchMove(e) {
+  if (!gesture.active || locked.value) return
+  const t = e.touches[0]
+  const dx = t.clientX - gesture.startX
+  const dy = t.clientY - gesture.startY
+  if (!gesture.mode) {
+    if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) && duration.value) {
+      gesture.mode = 'seek'
+      clearTimeout(gesture.lpTimer)
+    } else if (Math.abs(dy) > 12) {
+      gesture.mode = t.clientX < window.innerWidth / 2 ? 'brightness' : 'volume'
+      clearTimeout(gesture.lpTimer)
+    }
+  }
+  if (!gesture.mode) return
+  e.preventDefault()
+  if (gesture.mode === 'seek') {
+    const target = Math.max(0, Math.min(duration.value || 0, gesture.seekBase + dx * 0.4))
+    gesture.seekTarget = target
+    showGesture(`${formatTime(target)} / ${formatTime(duration.value)}`, dx >= 0 ? '快进' : '快退')
+  } else if (gesture.mode === 'volume') {
+    const v = Math.max(0, Math.min(1, gesture.volBase - dy / 300))
+    videoEl.value.volume = v
+    volume.value = v
+    showGesture(`音量 ${Math.round(v * 100)}%`)
+  } else if (gesture.mode === 'brightness') {
+    const level = Math.max(0, Math.min(1, gesture.brightBase - dy / 400))
+    brightness.value = (1 - level) * 0.85
+    showGesture(`亮度 ${Math.round(level * 100)}%`)
+  }
+}
+
+function onTouchEnd() {
+  if (!gesture.active) return
+  clearTimeout(gesture.lpTimer)
+  if (gesture.mode === 'seek' && gesture.seekTarget != null) {
+    videoEl.value.currentTime = gesture.seekTarget
+  } else if (gesture.mode === 'speed') {
+    videoEl.value.playbackRate = playbackRate.value
+  }
+  gesture.active = false
+  gesture.mode = null
+  gesture.seekTarget = null
+  if (gestureInfo.value) hideGestureSoon()
 }
 
 // Volume
@@ -689,6 +892,7 @@ function onMouseMove() {
 }
 
 function onClickPlayer(e) {
+  if (locked.value) return
   // Only toggle play on click the video area, not controls
   if (e.target === videoEl.value || e.target === playerContainer.value) {
     togglePlay()
@@ -696,7 +900,7 @@ function onClickPlayer(e) {
 }
 
 function onDblClick(e) {
-  // Double-tap zones (mobile-friendly): left = rewind, right = forward, center = fullscreen
+  if (locked.value) return
   const rect = playerContainer.value?.getBoundingClientRect()
   if (!rect) return
   const rel = (e.clientX - rect.left) / rect.width

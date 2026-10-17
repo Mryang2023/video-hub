@@ -1,0 +1,12 @@
+{
+  "appId": "com.videohub.personal",
+  "appName": "VideoHub",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "http",
+    "allowNavigation": ["*"]
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

@@ -3,6 +3,10 @@
     <div class="flex items-center gap-2 mb-4">
       <h2 class="text-lg font-semibold">我的收藏</h2>
       <span v-if="favs.length" class="text-sm text-gray-500">{{ favs.length }} 部</span>
+      <button v-if="favs.length" @click="runUpdateCheck" :disabled="checking"
+        class="ml-auto px-2.5 py-1 bg-dark-600 hover:bg-dark-500 rounded-lg text-xs text-gray-300 transition disabled:opacity-40">
+        {{ checking ? '检查中…' : '检查更新' }}
+      </button>
     </div>
 
     <!-- Loading skeleton -->
@@ -17,6 +21,10 @@
     <div v-else-if="favs.length" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
       <div v-for="f in favs" :key="f.site_key + '-' + f.vod_id" class="relative group">
         <VideoCard :video="f" @click="openDetail(f)" />
+        <span v-if="f.update_flag"
+          class="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full bg-red-500 text-[10px] text-white font-bold shadow z-10">
+          +{{ f.update_gap || '新' }}
+        </span>
         <button @click.stop="removeFav(f)" title="取消收藏"
           class="absolute top-1.5 left-1.5 p-1.5 bg-black/60 rounded-full text-amber-400 hover:text-red-400
                  opacity-0 group-hover:opacity-100 focus:opacity-100 transition">
@@ -36,7 +44,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getFavorites, deleteFavorite, siteLookup } from '../api'
+import { getFavorites, deleteFavorite, siteLookup, checkFavoriteUpdates, clearFavoriteUpdate } from '../api'
 import VideoCard from '../components/VideoCard.vue'
 import EmptyState from '../components/EmptyState.vue'
 
@@ -45,6 +53,7 @@ const router = useRouter()
 
 const favs = ref([])
 const loading = ref(false)
+const checking = ref(false)
 
 onMounted(load)
 
@@ -60,6 +69,24 @@ async function load() {
   }
 }
 
+// 手动触发追更检查
+async function runUpdateCheck() {
+  checking.value = true
+  try {
+    const { data } = await checkFavoriteUpdates()
+    if (data.updated > 0) {
+      emit('toast', { message: `检查完成：${data.updated} 部有新集数`, type: 'info' })
+    } else {
+      emit('toast', { message: `检查完成：暂无更新（已检查 ${data.checked} 部）`, type: 'info' })
+    }
+    await load()
+  } catch (e) {
+    emit('toast', { message: `检查失败: ${e.message}`, type: 'error' })
+  } finally {
+    checking.value = false
+  }
+}
+
 async function resolveApiUrl(f) {
   if (f.api_url) return f.api_url
   const { data } = await siteLookup({ site_key: f.site_key })
@@ -70,6 +97,8 @@ async function openDetail(f) {
   try {
     const apiUrl = await resolveApiUrl(f)
     if (!apiUrl) throw new Error('未找到站点')
+    // 打开即视为已知悉，清除更新徽标（失败静默）
+    clearFavoriteUpdate(f.site_key, String(f.vod_id)).catch(() => {})
     // HomeView watches route.query and opens the detail modal
     router.push({
       path: '/',

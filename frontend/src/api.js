@@ -59,8 +59,16 @@ export const siteLookup = (params, signal) =>
 // ── Health / Settings / Backup ───────────────────────
 export const sourcesHealth = (signal) =>
   api.get('/api/sources/health', { signal, timeout: 60000 })
+export const probeSites = (apiUrls, signal) =>
+  api.post('/api/site/probe', { api_urls: apiUrls }, { signal, timeout: 20000 })
 export const getSettings = (signal) => api.get('/api/settings', { signal })
 export const updateSettings = (patch) => api.put('/api/settings', patch)
 export const restoreBackup = (payload) => api.post('/api/restore', payload)
+
+// ── Favorite updates (追更) ──────────────────────────
+export const checkFavoriteUpdates = () =>
+  api.post('/api/favorites/check-updates', {}, { timeout: 60000 })
+export const clearFavoriteUpdate = (siteKey, vodId) =>
+  api.post('/api/favorites/clear-update', { site_key: siteKey, vod_id: vodId })
 
 export default api

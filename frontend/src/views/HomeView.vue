@@ -130,10 +130,16 @@
               d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
           </svg>
           <p class="text-red-400/80 text-sm mb-2">{{ errorMessage }}</p>
-          <button @click="loadContent()"
-            class="px-3 py-1.5 bg-dark-600 hover:bg-dark-500 rounded-lg text-xs text-gray-300 transition">
-            重试
-          </button>
+          <div class="flex items-center justify-center gap-2">
+            <button @click="loadContent()"
+              class="px-3 py-1.5 bg-dark-600 hover:bg-dark-500 rounded-lg text-xs text-gray-300 transition">
+              重试
+            </button>
+            <button v-if="nextSite" @click="emit('select-site', nextSite)"
+              class="px-3 py-1.5 bg-accent/20 hover:bg-accent/30 rounded-lg text-xs text-accent-light transition">
+              试试其他站点
+            </button>
+          </div>
         </div>
         <EmptyState v-else text="暂无内容" />
 
@@ -309,6 +315,14 @@ const aggPage = ref(1)
 const collapsedGroups = ref([])
 const isSearching = computed(() => props.searchQuery && props.searchQuery.trim())
 
+// 当前站点加载失败时，提供一个备选站点（同源内的下一个可搜索站点）
+const nextSite = computed(() => {
+  const list = (props.sites || []).filter(s => s.type === 1 && s.api)
+  if (!props.currentSite || list.length < 2) return null
+  const idx = list.findIndex(s => s.key === props.currentSite.key)
+  return list[(idx + 1) % list.length] || null
+})
+
 // Detail modal
 const showDetail = ref(false)
 const detailData = ref({})
@@ -476,7 +490,10 @@ async function doSearch() {
   } catch (e) {
     if (e.name !== 'CanceledError' && e.name !== 'AbortError') {
       console.error('Search failed:', e)
-      emit('toast', { message: `搜索失败: ${e.message}`, type: 'error' })
+      emit('toast', {
+        message: '当前站点搜索失败（站点可能已失联），可在左侧切换站点，或改用「全源」搜索',
+        type: 'error',
+      })
     }
   } finally {
     searchLoading.value = false
