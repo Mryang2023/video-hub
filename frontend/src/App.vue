@@ -65,28 +65,31 @@
       <!-- Search -->
       <div class="flex-1 max-w-xl mx-auto flex items-center gap-2 min-w-0">
         <template v-if="!isMobile || searchOpen">
-          <div class="relative flex-1 min-w-0">
+          <div class="relative flex-1 min-w-0" ref="searchWrap"
+            @focusin="searchFocused = true" @focusout="onSearchFocusOut">
             <input ref="searchInput" v-model="searchQuery" @keyup.enter="doSearch"
-              @focus="searchFocused = true" @blur="onSearchBlur"
               type="text" placeholder="搜索视频..."
               class="w-full bg-dark-600 border border-dark-500 rounded-lg px-4 py-1.5 pl-9 text-sm
                      focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition" />
             <svg class="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
             </svg>
-            <!-- Search history dropdown -->
+            <!-- Search history dropdown（全部用 button，电视遥控器 D-pad 可聚焦操作） -->
             <div v-if="searchFocused && searchHistory.length"
               class="absolute top-full left-0 right-0 mt-1 bg-dark-700 border border-dark-500 rounded-lg shadow-xl py-1 z-50">
               <div class="flex items-center justify-between px-3 py-1">
                 <span class="text-[10px] text-gray-500">搜索历史</span>
-                <button @mousedown.prevent="clearSearchHistory" class="text-[10px] text-gray-500 hover:text-red-400">清空</button>
+                <button type="button" @click="clearSearchHistory" class="text-[10px] text-gray-500 hover:text-red-400 focus:text-red-400 focus:outline-none">清空</button>
               </div>
               <div v-for="(h, i) in searchHistory" :key="h"
-                class="flex items-center justify-between px-3 py-1.5 hover:bg-dark-600 cursor-pointer group"
-                @mousedown.prevent="applySearchHistory(h)">
-                <span class="text-sm text-gray-300 truncate">{{ h }}</span>
-                <button @mousedown.prevent.stop="removeSearchHistory(i)"
-                  class="text-gray-600 hover:text-red-400 p-0.5 opacity-0 group-hover:opacity-100 transition">
+                class="flex items-center pr-1 group">
+                <button type="button" @click="applySearchHistory(h)"
+                  class="flex-1 min-w-0 text-left px-3 py-1.5 rounded text-sm text-gray-300 truncate
+                         hover:bg-dark-600 focus:bg-dark-600 focus:text-white focus:outline-none transition">
+                  {{ h }}
+                </button>
+                <button type="button" @click.stop="removeSearchHistory(i)" title="删除该条"
+                  class="text-gray-600 hover:text-red-400 focus:text-red-400 focus:outline-none p-1 shrink-0 transition">
                   <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                   </svg>
@@ -237,6 +240,7 @@
           :search-query="searchQuery"
           :search-mode="searchMode"
           @search="doSearch"
+          @search-word="onSearchWord"
           @play="goToPlayer"
           @select-site="selectSite"
           @toast="handleToast"
@@ -330,6 +334,7 @@ const healthChecking = ref(false)
 const searchFocused = ref(false)
 const searchHistory = ref([])
 const SEARCH_HIST_KEY = 'videohub_search_history'
+const searchWrap = ref(null)
 const sidebarOpen = ref(window.innerWidth >= 640)
 const showSourceMenu = ref(false)
 const showAddSource = ref(false)
@@ -537,6 +542,13 @@ function doSearch() {
   }
 }
 
+// 点选拼音猜测片名 → 按该片名重新搜索
+function onSearchWord(word) {
+  if (!word) return
+  searchQuery.value = word
+  doSearch()
+}
+
 // ── Search history ────────────────────────────────────
 function loadSearchHistory() {
   try {
@@ -573,8 +585,11 @@ function clearSearchHistory() {
   persistSearchHistory()
 }
 
-function onSearchBlur() {
-  setTimeout(() => { searchFocused.value = false }, 150)
+function onSearchFocusOut(e) {
+  // 焦点还在搜索区域内（输入框或历史下拉）时保持下拉展开——
+  // 电视遥控器靠 D-pad 移动焦点操作下拉，输入框失焦不能立刻收起
+  if (searchWrap.value && searchWrap.value.contains(e.relatedTarget)) return
+  searchFocused.value = false
 }
 
 // ── Source health ─────────────────────────────────────

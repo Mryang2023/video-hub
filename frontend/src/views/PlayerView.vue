@@ -1,7 +1,7 @@
 <template>
   <div class="h-full flex flex-col bg-dark-900">
     <!-- Player Area -->
-    <div class="relative bg-black flex-1 min-h-0" :class="cssFullscreen ? '!fixed inset-0 z-[9999]' : ''" ref="playerContainer"
+    <div class="relative bg-black flex-1 min-h-0" :class="cssFullscreen || webFullscreen ? '!fixed inset-0 z-[9999]' : ''" ref="playerContainer"
       @mousemove="onMouseMove" @click="onClickPlayer" @dblclick="onDblClick">
 
       <video ref="videoEl" class="w-full h-full object-contain touch-none select-none"
@@ -31,6 +31,15 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
             d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
         </svg>
+      </button>
+
+      <!-- 网页全屏时: 左上角悬浮返回/标题按钮 -->
+      <button v-if="webFullscreen && !locked" @click="exitWebFullscreen" title="退出网页全屏 (Esc)"
+        class="absolute top-3 left-3 z-30 flex items-center gap-1.5 max-w-[50%] px-3 py-1.5 bg-black/50 hover:bg-black/70 rounded-full text-white/90 text-xs backdrop-blur-sm transition">
+        <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+        </svg>
+        <span class="truncate">{{ vodName }}</span>
       </button>
 
       <!-- Initial loading overlay -->
@@ -90,17 +99,32 @@
         :class="{ 'opacity-0': !showControls && playing }"
         style="transition: opacity 0.3s"
         @click.stop @dblclick.stop>
-        <!-- Progress bar -->
-        <div class="group cursor-pointer mb-2" @click="seekVideo($event)">
-          <div class="h-1 group-hover:h-1.5 bg-white/20 rounded-full transition-all relative">
-            <!-- Buffer indicator -->
-            <div class="h-full bg-white/10 rounded-full absolute top-0"
-              :style="{ width: bufferProgress + '%' }"></div>
-            <!-- Play progress -->
-            <div class="h-full bg-accent rounded-full transition-all relative"
-              :style="{ width: progress + '%' }"></div>
-            <div class="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-accent rounded-full opacity-0 group-hover:opacity-100 transition"
-              :style="{ left: progress + '%', transform: 'translate(-50%, -50%)' }"></div>
+        <!-- Progress bar (悬停预览时间，点击/拖动定位) -->
+        <div class="group cursor-pointer mb-1 touch-none select-none"
+          @pointerdown="onProgressDown" @pointermove="onProgressMove"
+          @pointerup="onProgressUp" @pointercancel="onProgressUp"
+          @mousemove="onProgressHover" @mouseleave="hoverTime = null">
+          <div class="relative py-2">
+            <div class="h-1 group-hover:h-1.5 bg-white/20 rounded-full transition-all relative">
+              <!-- Buffer indicator -->
+              <div class="h-full bg-white/10 rounded-full absolute top-0"
+                :style="{ width: bufferProgress + '%' }"></div>
+              <!-- Play progress -->
+              <div class="h-full bg-gradient-to-r from-accent-dark to-accent rounded-full"
+                :style="{ width: progress + '%' }"></div>
+              <!-- Thumb -->
+              <div class="absolute top-1/2 w-3 h-3 bg-accent rounded-full shadow-[0_0_8px_rgba(99,102,241,0.9)]
+                          opacity-0 group-hover:opacity-100 transition-opacity"
+                :style="{ left: progress + '%', transform: 'translate(-50%, -50%)' }"></div>
+            </div>
+            <!-- Hover time tooltip -->
+            <div v-if="hoverTime !== null"
+              class="absolute bottom-full -translate-x-1/2 mb-1 pointer-events-none"
+              :style="{ left: hoverPct + '%' }">
+              <span class="block bg-dark-800 border border-dark-500 text-gray-200 text-[11px] tabular-nums px-1.5 py-0.5 rounded-md shadow-xl whitespace-nowrap">
+                {{ formatTime(hoverTime) }}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -115,21 +139,39 @@
             </svg>
           </button>
 
-          <!-- Volume -->
-          <div class="flex items-center gap-1 group/vol">
-            <button @click="toggleMute" class="text-gray-300 hover:text-white transition">
+          <!-- Volume (悬停弹出竖向音量条) -->
+          <div class="relative flex items-center group/vol">
+            <button @click="toggleMute" :title="volume === 0 ? '取消静音 (M)' : '静音 (M)'"
+              class="text-gray-300 hover:text-white transition p-1">
               <svg v-if="volume === 0" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"/>
               </svg>
+              <svg v-else-if="volume < 0.5" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072"/>
+              </svg>
               <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072"/>
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.071 4.929a10 10 0 010 14.142"/>
               </svg>
             </button>
-            <input type="range" min="0" max="1" step="0.05" :value="volume"
-              @input="setVolume($event.target.value)"
-              class="w-0 group-hover/vol:w-16 transition-all h-1 accent-accent cursor-pointer opacity-0 group-hover/vol:opacity-100" />
+            <!-- 竖向音量滑条弹出层 -->
+            <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-3
+                        opacity-0 invisible translate-y-1 delay-150
+                        group-hover/vol:opacity-100 group-hover/vol:visible group-hover/vol:translate-y-0 group-hover/vol:delay-0
+                        transition-all duration-200
+                        bg-dark-800/95 backdrop-blur border border-dark-500 rounded-xl shadow-2xl
+                        px-2.5 py-2 flex flex-col items-center z-10">
+              <span class="text-[10px] text-gray-400 tabular-nums mb-1.5">{{ Math.round(volume * 100) }}%</span>
+              <div class="h-24 w-5 flex items-center justify-center">
+                <input type="range" min="0" max="1" step="0.01" :value="volume"
+                  @input="setVolume($event.target.value)" @change="saveVolume()"
+                  :style="volumeBarStyle"
+                  class="w-24 h-1.5 rounded-full cursor-pointer -rotate-90" />
+              </div>
+            </div>
           </div>
 
           <!-- Time -->
@@ -140,13 +182,16 @@
           <div class="flex-1"></div>
 
           <!-- Keyboard shortcut hint (desktop only) -->
-          <span v-if="showShortcuts" class="hidden sm:inline text-[10px] text-gray-600">
-            空格:播放 ←→:快进退 F:全屏
+          <span v-if="showShortcuts" class="hidden lg:inline text-[10px] text-gray-600">
+            空格:播放 ←→:快进退 ↑↓:音量 F:全屏 M:静音
           </span>
 
           <!-- Episode drawer toggle -->
           <button v-if="episodes.length" @click="showEpDrawer = !showEpDrawer"
-            class="text-xs text-gray-300 hover:text-white px-2 py-1 rounded bg-dark-600/50 transition">
+            class="text-xs text-gray-300 hover:text-white px-2 py-1 rounded-md bg-dark-600/60 hover:bg-dark-600 transition flex items-center gap-1">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"/>
+            </svg>
             集数
           </button>
 
@@ -196,7 +241,7 @@
           </div>
 
           <!-- Picture-in-Picture -->
-          <button @click="togglePiP" class="text-gray-300 hover:text-white transition" title="画中画">
+          <button @click="togglePiP" class="text-gray-300 hover:text-white transition p-1" title="画中画">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z"/>
@@ -205,7 +250,7 @@
           </button>
 
           <!-- External player (APP 内调用系统播放器) -->
-          <button v-if="currentPlayUrl" @click="playExternal" class="text-gray-300 hover:text-white transition" title="外部播放器">
+          <button v-if="currentPlayUrl" @click="playExternal" class="text-gray-300 hover:text-white transition p-1" title="外部播放器">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
@@ -213,53 +258,82 @@
           </button>
 
           <!-- Lock (防误触) -->
-          <button @click="locked = true" class="text-gray-300 hover:text-white transition" title="锁定屏幕">
+          <button @click="locked = true" class="text-gray-300 hover:text-white transition p-1" title="锁定屏幕">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
             </svg>
           </button>
 
-          <!-- Fullscreen -->
-          <button @click="toggleFullscreen" class="text-gray-300 hover:text-white transition">
+          <!-- Web fullscreen (站内网页全屏: 播放器铺满视口) -->
+          <button v-if="!isApp" @click="toggleWebFullscreen"
+            :title="webFullscreen ? '退出网页全屏' : '网页全屏'"
+            class="text-gray-300 hover:text-white transition p-1"
+            :class="webFullscreen ? '!text-accent-light' : ''">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+              <rect x="3" y="4.5" width="18" height="15" rx="2" stroke-width="2"/>
+              <path v-if="!webFullscreen" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M7.5 11V8.5H10M16.5 13v2.5H14"/>
+              <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M14 8.5h2.5V11M10 15.5V13H7.5"/>
             </svg>
+          </button>
+
+          <!-- Fullscreen (进入后图标切换为"退出全屏") -->
+          <button @click="toggleFullscreen" :title="inFullscreen ? '退出全屏 (F)' : '全屏 (F)'"
+            class="text-gray-300 hover:text-white transition p-1">
+            <svg v-if="!inFullscreen" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9M20.25 20.25h-4.5m4.5 0v-4.5m0 4.5L15 15"/>
+            </svg>
+            <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5m4.5 0l-5.25 5.25M15 9h4.5M15 9V4.5m0 4.5l5.25-5.25M15 15h4.5m-4.5 0v4.5m0-4.5l5.25 5.25"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <!-- Episode drawer (置于播放器容器内，网页全屏/全屏时同样可用) -->
+      <div v-if="showEpDrawer"
+        class="absolute top-0 right-0 bottom-0 w-60 sm:w-72 bg-dark-900/95 backdrop-blur border-l border-dark-600 z-20 flex flex-col"
+        @click.stop @dblclick.stop>
+        <div class="flex items-center justify-between px-3 py-2 border-b border-dark-600 shrink-0">
+          <span class="text-xs text-gray-300 truncate">{{ vodName }} · 共{{ episodes.length }}集</span>
+          <button @click="showEpDrawer = false" class="text-gray-500 hover:text-white p-1 -mr-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <!-- 分组 tab (集数多时按段合并) -->
+        <div v-if="epGroups.length" class="flex gap-1 px-2 py-2 border-b border-dark-700 overflow-x-auto scrollbar-hide shrink-0">
+          <button v-for="(g, gi) in epGroups" :key="gi" @click="epGroup = gi"
+            class="px-2 py-0.5 rounded text-[11px] shrink-0 transition"
+            :class="gi === epGroup
+              ? 'bg-accent text-white'
+              : 'bg-dark-700 text-gray-500 hover:bg-dark-600 hover:text-gray-300'">
+            {{ g.label }}
+          </button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-2 grid grid-cols-3 gap-1.5 content-start">
+          <button v-for="item in visibleEpisodes" :key="item.idx"
+            @click="switchEpisode(item.ep, item.idx); showEpDrawer = false"
+            class="px-1 py-1.5 rounded text-[11px] text-center truncate transition"
+            :class="item.idx === currentEpisodeIndex
+              ? 'bg-accent text-white'
+              : 'bg-dark-700 text-gray-400 hover:bg-dark-600 hover:text-white'">
+            {{ item.ep.name || `第${item.idx + 1}集` }}
           </button>
         </div>
       </div>
     </div>
 
-    <!-- Episode drawer (mounted inside the player container so it works in fullscreen) -->
-    <div v-if="showEpDrawer"
-      class="absolute top-0 right-0 bottom-0 w-60 sm:w-72 bg-dark-900/95 border-l border-dark-600 z-20 flex flex-col"
-      @click.stop @dblclick.stop>
-      <div class="flex items-center justify-between px-3 py-2 border-b border-dark-600 shrink-0">
-        <span class="text-xs text-gray-300 truncate">{{ vodName }} · 共{{ episodes.length }}集</span>
-        <button @click="showEpDrawer = false" class="text-gray-500 hover:text-white p-1">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-          </svg>
-        </button>
-      </div>
-      <div class="flex-1 overflow-y-auto p-2 grid grid-cols-3 gap-1.5 content-start">
-        <button v-for="(ep, idx) in episodes" :key="idx"
-          @click="switchEpisode(ep, idx); showEpDrawer = false"
-          class="px-1 py-1.5 rounded text-[11px] text-center truncate transition"
-          :class="idx === currentEpisodeIndex
-            ? 'bg-accent text-white'
-            : 'bg-dark-700 text-gray-400 hover:bg-dark-600 hover:text-white'">
-          {{ ep.name || `第${idx + 1}集` }}
-        </button>
-      </div>
-    </div>
-
     <!-- Episode List -->
-    <div class="h-40 sm:h-48 bg-dark-800 border-t border-dark-600 overflow-y-auto shrink-0 px-3 sm:px-4 py-3">
-      <div class="flex items-center gap-3 mb-2">
+    <div class="h-44 sm:h-52 bg-dark-800 border-t border-dark-600 shrink-0 px-3 sm:px-4 py-3 flex flex-col min-h-0">
+      <div class="flex items-center gap-3 mb-2 shrink-0">
         <h3 class="text-sm font-semibold text-gray-300 truncate">{{ vodName }}</h3>
-        <span class="text-xs text-gray-500 shrink-0">正在播放: {{ episodeName }}</span>
+        <span class="text-xs text-gray-600 shrink-0">共{{ episodes.length }}集</span>
+        <span class="text-xs text-accent-light shrink-0 truncate max-w-[35%]">正在播放: {{ episodeName }}</span>
         <button @click="$router.push('/')"
           class="ml-auto text-xs text-gray-500 hover:text-gray-300 transition flex items-center gap-1 shrink-0">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -268,14 +342,24 @@
           返回
         </button>
       </div>
-      <div class="flex flex-wrap gap-1.5">
-        <button v-for="(ep, idx) in episodes" :key="idx"
-          @click="switchEpisode(ep, idx)"
-          class="px-3 py-1.5 rounded text-xs transition truncate max-w-[120px]"
-          :class="idx === currentEpisodeIndex
-            ? 'bg-accent text-white'
+      <!-- 分组 tab (集数多时按段合并，如 1-50 / 51-100) -->
+      <div v-if="epGroups.length" class="flex gap-1 mb-2 overflow-x-auto scrollbar-hide shrink-0">
+        <button v-for="(g, gi) in epGroups" :key="gi" @click="epGroup = gi"
+          class="px-2.5 py-1 rounded-md text-[11px] shrink-0 border transition"
+          :class="gi === epGroup
+            ? 'bg-accent/15 border-accent/50 text-accent-light'
+            : 'bg-dark-700/60 border-transparent text-gray-500 hover:text-gray-300'">
+          {{ g.label }}
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto flex flex-wrap gap-1.5 content-start">
+        <button v-for="item in visibleEpisodes" :key="item.idx"
+          @click="switchEpisode(item.ep, item.idx)"
+          class="px-3 py-1.5 rounded-md text-xs transition truncate max-w-[120px]"
+          :class="item.idx === currentEpisodeIndex
+            ? 'bg-accent text-white shadow-lg shadow-accent/25'
             : 'bg-dark-600 text-gray-400 hover:bg-dark-500 hover:text-white'">
-          {{ ep.name || `第${idx + 1}集` }}
+          {{ item.ep.name || `第${item.idx + 1}集` }}
         </button>
       </div>
     </div>
@@ -347,6 +431,35 @@ const currentEpisodeIndex = ref(0)
 const currentPlayUrl = ref('')
 const episodes = ref([])
 
+// ── 集数分组：集数过多时按段合并显示（如 1-50 / 51-100），避免一次渲染上千个按钮 ──
+const EP_GROUP_SIZE = 50
+const epGroup = ref(0)
+const epGroups = computed(() => {
+  const total = episodes.value.length
+  if (total <= EP_GROUP_SIZE) return []
+  const groups = []
+  for (let start = 0; start < total; start += EP_GROUP_SIZE) {
+    const end = Math.min(start + EP_GROUP_SIZE, total)
+    groups.push({ start, end, label: `${start + 1}-${end}` })
+  }
+  return groups
+})
+const visibleEpisodes = computed(() => {
+  const eps = episodes.value
+  if (!epGroups.value.length) return eps.map((ep, idx) => ({ ep, idx }))
+  const g = epGroups.value[Math.min(epGroup.value, epGroups.value.length - 1)]
+  const out = []
+  for (let i = g.start; i < g.end; i++) out.push({ ep: eps[i], idx: i })
+  return out
+})
+function alignEpGroup() {
+  if (!epGroups.value.length) return
+  const gi = Math.min(epGroups.value.length - 1, Math.floor(currentEpisodeIndex.value / EP_GROUP_SIZE))
+  epGroup.value = gi
+}
+// 换集（含自动连播）时自动定位到所在分组
+watch(currentEpisodeIndex, alignEpGroup)
+
 // Query params
 const siteKey = ref('')
 const siteName = ref('')
@@ -396,6 +509,7 @@ onMounted(() => {
   loadAppSettings()
   document.addEventListener('keydown', handleKeydown)
   document.addEventListener('click', closeMenus)
+  document.addEventListener('fullscreenchange', onFullscreenChange)
   window.addEventListener('popstate', onFsPopState)
   saveInterval = setInterval(saveProgress, 10000)
 })
@@ -415,6 +529,7 @@ onUnmounted(() => {
   clearTimeout(gesture.lpTimer)
   clearTimeout(gesture.hideTimer)
   window.removeEventListener('popstate', onFsPopState)
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
   clearTimeout(loadingTimeout)
   clearTimeout(bufferCountTimer)
   document.removeEventListener('keydown', handleKeydown)
@@ -471,6 +586,7 @@ async function loadEpisodes() {
           const [name, url] = ep.split('$')
           return { name: name || url, url: url || name }
         })
+        alignEpGroup()
         // 无 play_url 进入时（如旧历史记录恢复），自动定位到当前集并开播
         if (!currentPlayUrl.value && episodes.value[currentEpisodeIndex.value]) {
           const ep = episodes.value[currentEpisodeIndex.value]
@@ -671,10 +787,34 @@ function togglePlay() {
   else videoEl.value.pause()
 }
 
-function seekVideo(e) {
+// ── Progress bar: 悬停预览时间 + 点击/拖动定位 ──
+const hoverTime = ref(null)
+const hoverPct = ref(0)
+const scrubbing = ref(false)
+
+function progressPct(e) {
   const rect = e.currentTarget.getBoundingClientRect()
-  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-  videoEl.value.currentTime = pct * duration.value
+  return Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+}
+function seekToPct(pct) {
+  if (duration.value) videoEl.value.currentTime = pct * duration.value
+}
+function onProgressHover(e) {
+  const pct = progressPct(e)
+  hoverPct.value = Math.min(96, Math.max(4, pct * 100)) // 防止两端 tooltip 溢出
+  hoverTime.value = pct * duration.value
+}
+function onProgressDown(e) {
+  scrubbing.value = true
+  try { e.currentTarget.setPointerCapture(e.pointerId) } catch {}
+  seekToPct(progressPct(e))
+}
+function onProgressMove(e) {
+  onProgressHover(e)
+  if (scrubbing.value) seekToPct(progressPct(e))
+}
+function onProgressUp() {
+  scrubbing.value = false
 }
 
 function setSpeed(rate) {
@@ -686,6 +826,25 @@ function setSpeed(rate) {
 // ── 全屏：APP 内为 CSS 全屏 + 原生沉浸（AppNative 隐藏系统栏/锁定方向，Capacitor 会拦截
 //    HTML5 requestFullscreen 且桥 JS 不注入远程页面）；浏览器端仍走标准 Fullscreen API ──
 const cssFullscreen = ref(false)
+
+// 浏览器原生全屏状态（进入后按钮图标切换为"退出全屏"）
+const isNativeFs = ref(false)
+const inFullscreen = computed(() => isNativeFs.value || cssFullscreen.value)
+function onFullscreenChange() {
+  isNativeFs.value = !!document.fullscreenElement
+}
+
+// 站内网页全屏：播放器 fixed 铺满视口，不进入浏览器原生全屏
+const isApp = ref(!!window.AppNative)
+const webFullscreen = ref(false)
+function toggleWebFullscreen() {
+  if (window.AppNative) { toggleFullscreen(); return }
+  webFullscreen.value = !webFullscreen.value
+  showAction(webFullscreen.value ? '网页全屏' : '退出网页全屏')
+}
+function exitWebFullscreen() {
+  if (webFullscreen.value) webFullscreen.value = false
+}
 
 async function enterAppFullscreen() {
   const native = window.AppNative
@@ -717,7 +876,12 @@ async function toggleFullscreen() {
   if (document.fullscreenElement) {
     document.exitFullscreen()
   } else {
-    playerContainer.value?.requestFullscreen()
+    try {
+      await playerContainer.value?.requestFullscreen()
+    } catch {
+      // 原生全屏被拒绝（WebView 权限限制等）时退回站内网页全屏
+      toggleWebFullscreen()
+    }
   }
 }
 
@@ -863,6 +1027,14 @@ function onVolumeChange() {
   }
 }
 
+// 音量滑条填充：已调节部分用主题色渐变
+const volumeBarStyle = computed(() => {
+  const pct = Math.round(volume.value * 100)
+  return {
+    background: `linear-gradient(to right, #818cf8 0%, #818cf8 ${pct}%, rgba(255,255,255,0.15) ${pct}%)`
+  }
+})
+
 function saveVolume() {
   try { localStorage.setItem(VOLUME_KEY, String(volume.value)) } catch {}
 }
@@ -961,6 +1133,14 @@ function handleKeydown(e) {
     case 'M':
       toggleMute()
       showAction(volume.value === 0 ? '静音' : '取消静音')
+      break
+    case 'Escape':
+      // 原生全屏优先交给浏览器退出；部分 WebView 不响应时这里兜底
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {})
+        break
+      }
+      exitWebFullscreen()
       break
   }
 }

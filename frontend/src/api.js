@@ -32,11 +32,73 @@ export const getCategories = (params, signal) =>
   api.get('/api/site/categories', { params, signal })
 export const searchVideos = (params, signal) =>
   api.get('/api/site/search', { params, signal })
-// Aggregate search across all sources; backend caps each source at ~8s
+// Aggregate search across all sources; backend caps each source at ~10s.
+// Also the fallback path for searchStream on old TV WebViews, so keep the
+// timeout above the backend's worst case.
 export const searchAll = (params, signal) =>
-  api.get('/api/search/all', { params, signal, timeout: 20000 })
+  api.get('/api/search/all', { params, signal, timeout: 30000 })
+
+/**
+ * 流式聚合搜索：逐源回调 onEvent({type:'meta'|'source'|'done', ...})，
+ * 结果一到就上屏，不用等最慢的源。
+ * 旧电视内核不支持 fetch 流式读取（无 resp.body）时，自动回退到
+ * /api/search/all 一次性接口，对外仍是相同的 onEvent 事件流。
+ */
+export async function searchStream(params, { onEvent, signal }) {
+  const emitEvent = (raw) => {
+    const line = raw.split('\n').find((l) => l.startsWith('data:'))
+    if (!line) return
+    try {
+      onEvent(JSON.parse(line.slice(5).trim()))
+    } catch { /* 忽略坏帧 */ }
+  }
+
+  let resp
+  try {
+    resp = await fetch(`/api/search/stream?${new URLSearchParams(params)}`, {
+      signal,
+      headers: { Accept: 'text/event-stream' },
+    })
+  } catch (e) {
+    if (e.name === 'AbortError') throw e
+    // 网络层就失败，直接走 JSON 接口拿一个明确的错误信息
+    await fallback()
+    return
+  }
+
+  if (!resp.ok || !resp.body) {
+    await fallback()
+    return
+  }
+
+  const reader = resp.body.getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += decoder.decode(value, { stream: true })
+    let idx
+    while ((idx = buf.indexOf('\n\n')) >= 0) {
+      emitEvent(buf.slice(0, idx))
+      buf = buf.slice(idx + 2)
+    }
+  }
+  if (buf.trim()) emitEvent(buf)
+
+  async function fallback() {
+    const { data } = await searchAll(params, signal)
+    const results = data?.results || []
+    onEvent({ type: 'meta', total: results.length, cached: !!data?.cached })
+    for (const r of results) onEvent({ type: 'source', result: r })
+    onEvent({ type: 'done', elapsed_ms: data?.elapsed_ms, cached: !!data?.cached })
+  }
+}
 export const getDetail = (params, signal) => api.get('/api/site/detail', { params, signal })
 export const resolvePlayUrl = (params, signal) => api.get('/api/site/resolve', { params, signal })
+// 拼音首字母猜测：wmsj → [完美世界, ...]（后端本地标题索引，非实时）
+export const searchSuggest = (wd, signal) =>
+  api.get('/api/search/suggest', { params: { wd }, signal })
 
 // ── History & Favorites ─────────────────────────────
 export const getHistory = () => api.get('/api/history')

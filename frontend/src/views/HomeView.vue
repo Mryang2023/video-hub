@@ -20,6 +20,25 @@
           </span>
         </div>
 
+        <!-- 拼音首字母猜测：输入 wmsj 这类字母时给出候选片名 -->
+        <div v-if="sugResults.length" class="mb-5">
+          <div class="flex items-center gap-2 mb-2">
+            <h3 class="text-sm font-semibold text-gray-200">拼音猜测</h3>
+            <span class="text-[10px] text-gray-500">根据「{{ searchQuery.trim() }}」匹配的片名，点击直接搜索</span>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button v-for="m in sugResults" :key="m.name" type="button"
+              @click="emit('search-word', m.query)"
+              class="px-3 py-1.5 bg-dark-600 hover:bg-accent/30 rounded-lg text-sm text-gray-300 hover:text-white transition"
+              :title="'片名：' + m.name">
+              {{ m.query }}
+            </button>
+          </div>
+        </div>
+        <div v-else-if="lettersOnly && !sugReady" class="mb-4 text-xs text-gray-500">
+          拼音索引还在后台构建，稍后再输入字母试试…
+        </div>
+
         <!-- Aggregate: grouped by source -->
         <template v-if="searchMode === 'all'">
           <div v-for="g in aggResults" :key="g.source_id" class="mb-6">
@@ -271,7 +290,7 @@
 import { ref, watch, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  getCategories, searchVideos, searchAll, getDetail,
+  getCategories, searchVideos, searchAll, getDetail, searchSuggest,
   checkFavorite, addFavorite, deleteFavorite,
   getHistory, siteLookup,
 } from '../api'
@@ -285,7 +304,7 @@ const props = defineProps({
   searchQuery: String,
   searchMode: String, // 'site' | 'all'
 })
-const emit = defineEmits(['play', 'select-site', 'toast'])
+const emit = defineEmits(['play', 'select-site', 'toast', 'search-word'])
 const route = useRoute()
 const router = useRouter()
 
@@ -314,6 +333,40 @@ const aggTotal = ref(0)
 const aggPage = ref(1)
 const collapsedGroups = ref([])
 const isSearching = computed(() => props.searchQuery && props.searchQuery.trim())
+
+// 拼音猜测（纯字母关键词，如 wmsj → 完美世界）
+const sugResults = ref([])
+const sugReady = ref(true)
+const lettersOnly = computed(() => /^[a-z0-9]{2,}$/.test((props.searchQuery || '').trim().toLowerCase()))
+let sugAbort = null
+let sugDebounce = null
+
+watch(() => props.searchQuery, (q) => {
+  clearTimeout(sugDebounce)
+  const kw = (q || '').trim().toLowerCase()
+  if (/^[a-z0-9]{2,}$/.test(kw)) {
+    sugDebounce = setTimeout(fetchSuggest, 350, kw)
+  } else {
+    if (sugAbort) sugAbort.abort()
+    sugResults.value = []
+  }
+})
+
+async function fetchSuggest(kw) {
+  if (sugAbort) sugAbort.abort()
+  sugAbort = new AbortController()
+  try {
+    const { data } = await searchSuggest(kw, sugAbort.signal)
+    sugReady.value = data.ready !== false
+    // 同一核心词的多个变体只留一条（精编版/2024 都指向"完美世界"时只显示一个）
+    const seen = new Set()
+    sugResults.value = (data.matches || []).filter(m => m.query && !seen.has(m.query) && seen.add(m.query))
+  } catch (e) {
+    if (e.name !== 'CanceledError' && e.name !== 'AbortError') {
+      sugResults.value = []
+    }
+  }
+}
 
 // 当前站点加载失败时，提供一个备选站点（同源内的下一个可搜索站点）
 const nextSite = computed(() => {
@@ -505,29 +558,36 @@ async function doAggregateSearch() {
 
   if (searchAbort) searchAbort.abort()
   searchAbort = new AbortController()
+  const signal = searchAbort.signal
 
   searchLoading.value = true
   aggResults.value = []
   aggDone.value = 0
   aggTotal.value = 0
   try {
-    const { data } = await searchAll({ wd: props.searchQuery, page: aggPage.value }, searchAbort.signal)
-    const groups = data?.results || []
-    aggTotal.value = groups.length
-    // Reveal groups one by one for a per-source progress feel
-    for (const g of groups) {
-      if (searchAbort.signal.aborted) return
-      aggResults.value.push(g)
-      aggDone.value = aggResults.value.length
-      await new Promise(r => setTimeout(r, 40))
-    }
+    // 流式接口：每个源一完成就推给前端，先到先上屏
+    await searchStream(
+      { wd: props.searchQuery, page: aggPage.value },
+      {
+        signal,
+        onEvent(ev) {
+          if (signal.aborted) return
+          if (ev.type === 'meta') {
+            aggTotal.value = ev.total
+          } else if (ev.type === 'source') {
+            aggResults.value.push(ev.result)
+            aggDone.value = aggResults.value.length
+          }
+        },
+      },
+    )
   } catch (e) {
-    if (e.name !== 'CanceledError' && e.name !== 'AbortError') {
+    if (e.name !== 'AbortError' && !signal.aborted) {
       console.error('Aggregate search failed:', e)
       emit('toast', { message: `聚合搜索失败: ${e.message}`, type: 'error' })
     }
   } finally {
-    searchLoading.value = false
+    if (!signal.aborted) searchLoading.value = false
   }
 }
 

@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">VideoHub TV</string>
+    <string name="tab_home">首页</string>
+    <string name="tab_live">直播</string>
+    <string name="tab_search">搜索</string>
+    <string name="tab_fav">收藏</string>
+    <string name="tab_hist">历史</string>
+    <string name="tab_set">设置</string>
+    <string name="connect_title">连接到 VideoHub 服务器</string>
+    <string name="connect_hint">http://192.168.101.18:8000</string>
+    <string name="connect_btn">连接</string>
+    <string name="connect_checking">正在连接 %1$s …</string>
+    <string name="connect_ok">连接成功</string>
+    <string name="connect_fail">无法连接：%1$s</string>
+    <string name="connect_default_chip">使用推荐地址 %1$s</string>
+    <string name="shelf_continue">继续观看</string>
+    <string name="shelf_fav">我的收藏 · 有更新</string>
+    <string name="shelf_hot">热门内容</string>
+    <string name="hero_resume">▶ 继续播放</string>
+    <string name="hero_play">▶ 立即播放</string>
+    <string name="shelf_movie">电影</string>
+    <string name="shelf_series">剧集</string>
+    <string name="shelf_anime">动漫</string>
+    <string name="exit_hint">再按一次返回键退出</string>
+    <string name="coming_soon">该页面在下一阶段实现</string>
+
+    <!-- M2 详情页 -->
+    <string name="back">‹ 返回</string>
+    <string name="play_from_start">播放第 1 集</string>
+    <string name="play_resume">继续播放 第%1$d集</string>
+    <string name="play_resume_single">继续播放</string>
+    <string name="fav_add">♡ 收藏</string>
+    <string name="fav_remove">♥ 已收藏</string>
+    <string name="detail_load_fail">详情加载失败，请稍后再试</string>
+    <string name="player_wip">M3 播放器正在开发中，下一版就能看啦</string>
+    <string name="fav_added">已加入收藏，更新会提醒你</string>
+    <string name="fav_removed">已取消收藏</string>
+
+    <!-- M2 搜索页 -->
+    <string name="search_hint">搜索片名，按 OK 调起输入法</string>
+    <string name="search_btn">搜索</string>
+    <string name="search_hot">热门搜索 · 在追</string>
+    <string name="search_suggest">拼音猜测 · 点击片名直接搜索</string>
+    <string name="search_history">搜索历史</string>
+    <string name="search_empty">没有找到结果，换个关键词试试</string>
+    <string name="search_failed">搜索失败，请稍后再试</string>
+
+    <!-- M2 收藏 / 历史 -->
+    <string name="fav_empty">还没有收藏，看剧时点「收藏」就会出现在这里</string>
+    <string name="hist_empty">暂无观看历史</string>
+    <string name="hist_at_ep">看到第 %1$d 集</string>
+
+    <!-- M3 播放器 -->
+    <string name="pp_pause">⏸ 暂停</string>
+    <string name="pp_play">▶ 播放</string>
+    <string name="pp_prev">上一集</string>
+    <string name="pp_next">下一集</string>
+    <string name="pp_eps">选集</string>
+    <string name="pp_rate">倍速 1.0x</string>
+    <string name="pp_first_ep">已经是第一集</string>
+    <string name="pp_last_ep">已经是最后一集</string>
+    <string name="pp_play_fail">播放失败：%1$s</string>
+    <string name="pp_retry">重试</string>
+    <string name="pp_switch_src">换源重试</string>
+    <string name="pp_timeout">加载超时，请重试或换源</string>
+    <string name="pp_resolve_fail">播放地址解析失败</string>
+    <string name="pp_no_more_src">没有其它播放源了</string>
+
+    <!-- M4 设置 / 源管理 -->
+    <string name="src_health">检测全部源</string>
+    <string name="src_add">添加源</string>
+
+    <!-- 直播 -->
+    <string name="live_load_fail">直播频道加载失败，请检查网络后重试</string>
+    <string name="live_play_fail">该频道暂时无法播放\n可按 ↑/↓ 换台或重试</string>
+    <string name="live_bad_stream">不支持的流格式（仅支持 HLS 直播源）</string>
+    <string name="live_retry">重试</string>
+    <string name="live_osd_hint">↑↓ 换台 · ←→ 换线路 · OK 显示信息 · 返回退出</string>
+    <string name="live_line_of">%1$s · 线路 %2$d/%3$d</string>
+</resources>

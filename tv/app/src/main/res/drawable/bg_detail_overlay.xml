@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 详情页压暗：左侧重（文字列）+ 整体底部渐重，比四周均匀压暗更有"影院"纵深 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape>
+            <gradient
+                android:angle="0"
+                android:startColor="#EB060608"
+                android:centerColor="#CC060608"
+                android:endColor="#8C060608" />
+        </shape>
+    </item>
+    <item>
+        <shape>
+            <gradient
+                android:angle="90"
+                android:startColor="#66060608"
+                android:centerColor="#00000000"
+                android:endColor="#D9060608" />
+        </shape>
+    </item>
+</layer-list>

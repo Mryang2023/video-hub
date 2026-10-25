@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="text_secondary">#FF8E8E93</color>
+    <color name="tab_inactive">#FF7C7C86</color>
+    <color name="glass">#26FFFFFF</color>
+    <color name="focus_ring">#FFFFFFFF</color>
+    <color name="badge_red">#FFFF453A</color>
+    <color name="ok_green">#FF30D158</color>
+    <color name="err_red">#FFFF6961</color>
+    <color name="input_bg">#FF1C1C22</color>
+    <!-- tvOS 风格基础层：非纯黑（黑里透一点蓝灰），氛围层叠加在它上面 -->
+    <color name="bg_deep">#FF060608</color>
+    <!-- 卡片下方标题未聚焦色（tvOS：灰字，聚焦变白） -->
+    <color name="title_dim">#FF9A9AA2</color>
+    <!-- 海报占位渐变起点色（终点在代码里按深色叠加） -->
+    <color name="ph1">#FF4338CA</color>
+    <color name="ph2">#FF0F766E</color>
+    <color name="ph3">#FF7F1D1D</color>
+    <color name="ph4">#FF92400E</color>
+    <color name="ph5">#FF1E3A8A</color>
+    <color name="ph6">#FF6B21A8</color>
+    <color name="ph7">#FF14532D</color>
+    <color name="ph8">#FF334155</color>
+</resources>

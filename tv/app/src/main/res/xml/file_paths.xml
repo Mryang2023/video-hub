@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- 应用外部私有目录：下载的更新包放这里，无需存储权限 -->
+    <external-files-path name="updates" path="." />
+    <files-path name="internal" path="." />
+</paths>

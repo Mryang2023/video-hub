@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/gtab"
+    android:layout_width="wrap_content"
+    android:layout_height="40dp"
+    android:layout_marginEnd="10dp"
+    android:background="@drawable/bg_gtab"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center"
+    android:paddingHorizontal="18dp"
+    android:textColor="@color/gtab_text"
+    android:textSize="13sp" />

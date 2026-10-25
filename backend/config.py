@@ -5,7 +5,10 @@ from pathlib import Path
 DATA_DIR = Path(__file__).parent / "data"
 SOURCES_FILE = DATA_DIR / "sources.json"
 HISTORY_FILE = DATA_DIR / "history.json"
+HISTORY_TV_FILE = DATA_DIR / "history.tv.json"
 FAVORITES_FILE = DATA_DIR / "favorites.json"
+FAVORITES_TV_FILE = DATA_DIR / "favorites.tv.json"
+LIVES_FILE = DATA_DIR / "lives.json"
 
 DATA_DIR.mkdir(exist_ok=True)
 

@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_deep"
+    android:clipChildren="false">
+
+    <!-- 主框架：顶部标签栏 + 标签页内容。
+         电视普遍有 2~4% 过扫描（画面边缘被裁），给内容留安全边距；
+         全屏层(fullContainer)不加，视频保持满屏 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipChildren="false"
+        android:orientation="vertical"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp">
+
+        <LinearLayout
+            android:id="@+id/tabbar"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:clipChildren="false"
+            android:gravity="bottom"
+            android:orientation="horizontal"
+            android:paddingHorizontal="40dp">
+
+            <TextView
+                android:id="@+id/tabHome"
+                style="@style/HomeTab"
+                android:text="@string/tab_home" />
+
+            <TextView
+                android:id="@+id/tabLive"
+                style="@style/HomeTab"
+                android:text="@string/tab_live" />
+
+            <TextView
+                android:id="@+id/tabSearch"
+                style="@style/HomeTab"
+                android:text="@string/tab_search" />
+
+            <TextView
+                android:id="@+id/tabFav"
+                style="@style/HomeTab"
+                android:text="@string/tab_fav" />
+
+            <TextView
+                android:id="@+id/tabHist"
+                style="@style/HomeTab"
+                android:text="@string/tab_hist" />
+
+            <TextView
+                android:id="@+id/tabSet"
+                style="@style/HomeTab"
+                android:text="@string/tab_set" />
+
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/serverInfo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:alpha="0.55"
+                android:textColor="@color/text_secondary"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <!-- focusable 容器是方向搜索的黑洞（落上去就出不来），
+             焦点回退一律还 给标签；这里不再自身可聚焦 -->
+        <FrameLayout
+            android:id="@+id/tabContainer"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipChildren="false" />
+    </LinearLayout>
+
+    <!-- 全屏层：连接页 / 详情页盖在标签栏上面；可聚焦，push 时立即抢焦点 -->
+    <FrameLayout
+        android:id="@+id/fullContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipChildren="false"
+        android:focusable="true" />
+</FrameLayout>

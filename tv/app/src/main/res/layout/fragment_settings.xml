@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_deep"
+    android:clipToPadding="false"
+    android:paddingHorizontal="44dp"
+    android:paddingBottom="30dp"
+    android:scrollbars="none">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView style="@style/SectionTitle" android:text="服务器" />
+
+        <LinearLayout android:id="@+id/rowServer" style="@style/SetRow">
+            <TextView style="@style/SetLabel" android:text="服务器状态" />
+            <TextView android:id="@+id/vServer" style="@style/SetValue" android:text="检查中…" />
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/rowChangeServer" style="@style/SetRow">
+            <TextView style="@style/SetLabel" android:text="修改服务器地址" />
+            <TextView style="@style/SetValue" android:text="" />
+        </LinearLayout>
+
+        <TextView style="@style/SectionTitle" android:text="内容源" />
+
+        <LinearLayout android:id="@+id/rowSrc" style="@style/SetRow">
+            <TextView style="@style/SetLabel" android:text="源管理" />
+            <TextView android:id="@+id/vSrc" style="@style/SetValue" android:text="" />
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/rowHealth" style="@style/SetRow">
+            <TextView style="@style/SetLabel" android:text="源健康记录" />
+            <TextView android:id="@+id/vHealth" style="@style/SetValue" android:text="记录正常" />
+        </LinearLayout>
+
+        <TextView style="@style/SectionTitle" android:text="播放" />
+
+        <LinearLayout android:id="@+id/rowRate" style="@style/SetRow">
+            <TextView style="@style/SetLabel" android:text="默认倍速" />
+            <TextView android:id="@+id/vRate" style="@style/SetValue" android:text="1.0x" />
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/rowAuto" style="@style/SetRow">
+            <TextView style="@style/SetLabel" android:text="自动连播下一集" />
+            <TextView android:id="@+id/vAuto" style="@style/SetValue" android:text="开" />
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/rowHist" style="@style/SetRow">
+            <TextView style="@style/SetLabel" android:text="记录观看历史" />
+            <TextView android:id="@+id/vHist" style="@style/SetValue" android:text="开" />
+        </LinearLayout>
+
+        <TextView style="@style/SectionTitle" android:text="数据" />
+
+        <LinearLayout android:id="@+id/rowClear" style="@style/SetRow">
+            <TextView style="@style/SetLabel" android:text="清空观看历史" />
+            <TextView style="@style/SetValue" android:text="" />
+        </LinearLayout>
+
+        <TextView style="@style/SectionTitle" android:text="关于" />
+
+        <LinearLayout android:id="@+id/rowDiag" style="@style/SetRow">
+            <TextView style="@style/SetLabel" android:text="按键/屏参诊断浮层" />
+            <TextView android:id="@+id/vDiag" style="@style/SetValue" android:text="开" />
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/rowAbout" style="@style/SetRow">
+            <TextView style="@style/SetLabel" android:text="VideoHub TV" />
+            <TextView android:id="@+id/vAbout" style="@style/SetValue" android:text="v0.1 · 按 OK 检查更新" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

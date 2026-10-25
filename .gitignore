@@ -30,3 +30,22 @@ desktop.ini
 # Temp
 *.tmp
 *.bak
+
+# Logs
+*.log
+
+# Android build artifacts & local config
+tv/.gradle/
+tv/.kotlin/
+tv/build/
+tv/app/build/
+tv/local.properties
+**/keystore.properties
+*.keystore
+
+# TV dev screenshots (regenerable)
+tv/dev/screenshots/
+
+# uvicorn runtime logs
+backend/uvicorn.log
+backend/uvicorn.err.log
